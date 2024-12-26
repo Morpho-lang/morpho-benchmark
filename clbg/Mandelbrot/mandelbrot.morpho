@@ -1,0 +1,51 @@
+// Mandelbrot set generator 
+// https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+
+import bytecodeoptimizer
+
+var N = 100 
+var input = System.arguments() 
+if (input.count()>0) N=Int(input[0])
+
+var w = N, h = N 
+var byte_acc = 0, bit_num = 0
+var iter = 50
+var limit = 2.0
+
+print "P4\n${w} ${h}\n"
+
+for (y in 0...N) {
+  for (x in 0...N) {
+    var Zr=0.0, Zi=0.0, Tr=0.0, Ti=0.0
+    var Cr=(2.0 * x / w - 1.5), Ci = (2.0 * y / h - 1.0) 
+
+    for (i in 1..iter) {
+      if (Tr + Ti <= limit*limit) {
+        Zi = 2.0*Zr*Zi + Ci
+        Zr = Tr - Ti + Cr
+        Tr = Zr * Zr
+        Ti = Zi * Zi
+      }
+    }  
+
+    byte_acc *= 2
+    if (Tr+Ti <= limit*limit) byte_acc = byte_acc + 1
+
+    bit_num += 1
+
+    if (bit_num == 8) {
+      if (byte_acc>0) System.prnt(".") 
+      else System.prnt(" ")
+      //sys.stdout.buffer.write(bytes([byte_acc]))        
+      byte_acc = 0
+      bit_num = 0
+    } else if (x == w - 1) {
+      if (byte_acc>0) System.prnt(".") 
+      else System.prnt(" ")
+      //byte_acc = byte_acc << (8-w%8)   
+      //sys.stdout.buffer.write(bytes([byte_acc]))  
+      byte_acc = 0
+      bit_num = 0
+    }        
+  }
+}

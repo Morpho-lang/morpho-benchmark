@@ -1,0 +1,61 @@
+// The Computer Language Benchmarks Game
+//   https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+//
+
+fn fannkuch(n) {
+   var perm1 = List(0...n)       
+   var perm = perm1.clone() 
+   var count = perm1.clone()        
+   for (i in 0...n) { perm[i]=0; count[i]=0 }
+
+   var flips=0, nperm=0, checksum=0
+  
+   for (var r=n; r>0; nperm+=1) {
+      for (;r!=1;r-=1) count[r-1]=r 
+      for (var i=0; i<n; i+=1) perm[i]=perm1[i]
+
+      // Count flips and update max and checksum
+      var f = 0
+      for (var k = perm[0]; k!=0; k = perm[0]) {
+         for (var i=0; 2*i<k; i+=1) {
+            var t = perm[i]; perm[i] = perm[k-i]; perm[k-i] = t
+         }
+         f+=1
+      }
+
+      if (f>flips) flips=f 
+
+      if (mod(nperm, 2)==0) checksum+=f
+      else checksum-=f
+
+      // Use incremental change to generate another permutation
+      var more = true 
+      while (more) {
+         if (r==n) {
+            print checksum 
+            return flips 
+         }
+
+         var p0 = perm1[0]
+         var j 
+         for (var i=0; i<r; i=j) {
+            j = i + 1
+            perm1[i] = perm1[j]
+         }
+
+         perm1[r] = p0 
+         count[r] -= 1 
+
+         if (count[r] > 0) more = false
+         else r += 1 
+      }   
+   }
+
+   return flips  
+}
+
+var n = 7
+var input = System.arguments() 
+if (input.count()>0) n=Int(input[0])
+
+print "Pfannkuchen(${n}) = ${fannkuch(n)}"

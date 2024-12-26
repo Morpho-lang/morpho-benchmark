@@ -1,0 +1,56 @@
+// The Computer Language Benchmarks Game
+//  https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+//
+
+class Tree {
+  init(left, right) {
+    self.left = left
+    self.right = right 
+  }
+    
+  with(depth) {
+   if (depth==0) return Tree(nil, nil)
+   return Tree(Tree.with(depth-1), Tree.with(depth-1))
+  }
+    
+  node_count() {
+   if (self.left) return 1 + self.left.node_count() + self.right.node_count()
+   return 1 
+  }
+}
+
+fn count(depth) {
+  var t = Tree.with(depth)         
+  var c = t.node_count()
+  return c
+}
+
+fn stretch(depth){       
+  print "stretch tree of depth ${depth}\t check: ${count(depth)}"
+}
+
+fn main(n) {
+  var MIN_DEPTH = 4  
+  var max_depth = n 
+  if (MIN_DEPTH + 2 > n) max_depth = (MIN_DEPTH + 2)
+  var stretch_depth = max_depth + 1   
+  
+  stretch(stretch_depth) 
+  var long_lived_tree = Tree.with(max_depth) 
+
+  for (depth in MIN_DEPTH..stretch_depth:2) {
+    var iterations = 2^(max_depth - depth + MIN_DEPTH)  
+    var sum = 0   
+    for (i in 0...iterations) sum += count(depth)
+    print "${iterations}\t trees of depth ${depth}\t check: ${sum}"       
+  }
+
+  var c = long_lived_tree.node_count()
+  print "long lived tree of depth ${max_depth}\t check: ${c}"
+} 
+
+var N = 10
+var input = System.arguments() 
+if (input.count()>0) N=Int(input[0])
+
+main(N)

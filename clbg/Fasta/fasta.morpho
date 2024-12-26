@@ -1,0 +1,87 @@
+// The Computer Language Benchmarks Game
+//  https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+//
+
+var IM = 139968
+var IA = 3877
+var IC = 29573
+var SEED = 42
+
+var seed = SEED
+
+fn fastaRand(max) {
+   seed = mod(seed * IA + IC, IM)
+   return max * seed / IM
+}
+
+var ALU = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA" 
+
+var IUB = "acgtBDHKMNRSVWY"
+var IUB_P = [
+   0.27, 0.12, 0.12, 0.27, 
+   0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02 
+]
+
+var HomoSapiens = "acgt"
+var HomoSapiens_P = [
+   0.3029549426680,
+   0.1979883004921,
+   0.1975473066391,
+   0.3015094502008
+]  
+
+var LINELEN = 60
+
+// slowest character-at-a-time output
+fn repeatFasta(seq, n) {
+   var length = seq.count()
+   var i 
+   // explicit line buffer    
+   var b = ""    
+   for (i=0; i<n; i+=1) {
+      b += seq[mod(i,length)]   
+      if (mod(i,LINELEN) == LINELEN - 1) {
+         print b
+         b = ""  
+      }
+   }           
+   if (mod(i,LINELEN) != 0) print b
+}  
+
+fn randomFasta(seq, probability, n) {
+   var length = seq.count() 
+   var i, j
+   // explicit line buffer    
+   var b = ""   
+   for (i=0; i<n; i+=1) {
+      var v = fastaRand(1.0)       
+      // slowest idiomatic linear lookup.  Fast if len is short though.
+      for (j=0; j<length; j+=1) {     
+         v -= probability[j]
+         if (v<0) break     
+      }
+      b += seq[j]   
+      if (mod(i, LINELEN) == LINELEN - 1) {
+         print b
+         b = "" 
+      }
+   }
+   if (mod(i+1, LINELEN) != 0) print b
+}
+
+fn main(n) {
+   print ">ONE Homo sapiens alu"     
+   repeatFasta(ALU, n*2)
+   
+   print ">TWO IUB ambiguity codes"
+   randomFasta(IUB, IUB_P, n*3)   
+   
+   print ">THREE Homo sapiens frequency"
+   randomFasta(HomoSapiens, HomoSapiens_P, n*5)
+}
+
+var N = 1000
+var input = System.arguments() 
+if (input.count()>0) N=Int(input[0])
+
+main(N)

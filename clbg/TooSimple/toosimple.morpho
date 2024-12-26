@@ -1,0 +1,26 @@
+// The Computer Language Benchmarks Game
+// https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+
+fn main(n) {
+    // mtime side-effect
+    var f = File("./one", "w") 
+    f.close() 
+
+    var sum = 0.0
+    var flip = -1.0
+    for (i in 1...n) {    
+        flip *= -1.0        
+        sum += flip/(2*i - 1)
+    }
+    print (sum*4.0).format("%.9f")
+    
+    // mtime side-effect
+    var f = File("./two", "w") 
+    f.close() 
+}
+
+var N = 100
+var args = System.arguments()
+if (args.count()>0) N=Int(args[0])
+
+main(N) 
