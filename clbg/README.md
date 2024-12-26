@@ -8,14 +8,14 @@ All files derived from CLBG are subject to the BSD license provided in the origi
 
 These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They represent the output of the benchmark.py script which yields the shortest time obtained when each was run 10 times.
 
-                morpho6  python3.9 python3.12 lua      ruby     perl    
-BinaryTrees     1.54     3.64     1.68     0.65     0.98     1.13    
-NBody           1.58     1.99     0.87     0.27     0.58     0.57    
-TooSimple       0.57     1.39     1.27     -        0.9      -       
-Mandelbrot      1.08     1.77     1.19     0.21     0.42     0.48    
-Fasta           0.79     0.93     0.62     0.07     0.58     0.17    
-SpectralNorm    1.42     2.55     1.8      0.37     0.79     0.45    
-Fannkuch        1.47     2.01     0.78     0.18     0.45     0.63   
+                    morpho6  python3.9 python3.12 lua      ruby     perl    
+    BinaryTrees     1.54     3.64     1.68     0.65     0.98     1.13    
+    NBody           1.58     1.99     0.87     0.27     0.58     0.57    
+    TooSimple       0.57     1.39     1.27     -        0.9      -       
+    Mandelbrot      1.08     1.77     1.19     0.21     0.42     0.48    
+    Fasta           0.79     0.93     0.62     0.07     0.58     0.17    
+    SpectralNorm    1.42     2.55     1.8      0.37     0.79     0.45    
+    Fannkuch        1.47     2.01     0.78     0.18     0.45     0.63   
 
 ## Future work
 
