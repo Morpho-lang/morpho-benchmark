@@ -29,7 +29,7 @@ Certain benchmarks are presently omitted as they require a few additional featur
 
 * Regular expressions (we intend to wrap an external library for these)
 
-Additionally, running the tests at full length in some cases requires iteration counts that are larger than morpho's standard uint32 type.
+Additionally, running the tests at full length in some cases requires iteration counts that are larger than morpho's standard int32 type.
 
 We also note a few desirable future features for morpho and its library: 
 
