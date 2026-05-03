@@ -1,7 +1,7 @@
 // Mandelbrot set generator 
 // https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
 
-import bytecodeoptimizer
+//import bytecodeoptimizer
 
 var N = 100 
 var input = System.arguments() 

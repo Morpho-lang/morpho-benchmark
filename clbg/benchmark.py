@@ -14,6 +14,8 @@ Dictionary of languages as keys mapping to corresponding extension
 languages = { "morpho6" : "morpho",
               "python3.9" : "py", 
               "python3.12" : "py", 
+              "python3.13" : "py", 
+              "python3.14" : "py", 
               "lua": "lua",
               "ruby": "ruby",
               "perl": "perl" }
