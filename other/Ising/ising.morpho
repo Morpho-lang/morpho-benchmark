@@ -3,7 +3,7 @@
  */
 
 var N=20 // Size of the board
-var Niter=1000 // Number of iterations in sweeps
+var Niter=10000 // Number of iterations in sweeps
 var T=2 // Temperature
 
 var a[N,N] // The board

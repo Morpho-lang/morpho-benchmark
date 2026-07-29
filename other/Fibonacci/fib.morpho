@@ -7,11 +7,9 @@ fn f(x) {
 
 var start = clock()
 
-print f(28)
-print f(28)
-print f(28)
-print f(28)
-print f(28)
+for (i in 1..100) {
+	print f(28)
+}
 
 var end = clock()
 

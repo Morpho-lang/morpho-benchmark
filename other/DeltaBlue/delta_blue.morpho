@@ -660,7 +660,7 @@ fn projectionTest(n) {
 
 var start = clock()
 
-for (i in 1..40) {
+for (i in 1..400) {
   chainTest(100)
 	projectionTest(100)
 }

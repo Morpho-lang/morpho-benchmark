@@ -625,7 +625,7 @@ planner = None
 
 def delta_blue():
     global total
-    for i in range(40):
+    for i in range(400):
         chain_test(100)
         projection_test(100)
     print(total)
