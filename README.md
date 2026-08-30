@@ -27,4 +27,7 @@ Each program is run several times (10 by default); the reported time is the fast
 ```
 python3 tools/benchmark.py --help
 python3 tools/benchmark.py --list clbg
+python3 tools/benchmark.py -O language
 ```
+
+The `-O` flag also times morpho with `-O --eval "import bytecodeoptimizer"`, reported as a `morpho -O` column next to the unoptimized run.

@@ -39,11 +39,34 @@ CANDIDATES = (
 SKIP_DIRS = {"tools", "__pycache__"}
 SKIP_FILES = {"benchmark.py"}
 
+# morpho6 -O enables optimization once bytecodeoptimizer is imported.
+MORPHO_OPTIMIZE_ARGS = ("-O", "--eval", "import bytecodeoptimizer")
+
 
 def green(text):
     if sys.stdout.isatty():
         return f"\033[32m{text}\033[0m"
     return text
+
+
+def is_morpho(name):
+    return name.startswith("morpho")
+
+
+def expand_runtimes(runtimes, optimize):
+    """Turn detected interpreters into runnable variants.
+
+    With -O, each morpho interpreter is included twice: once as-is and once
+    with -O --eval "import bytecodeoptimizer".
+    """
+    expanded = []
+    for name, command, extensions in runtimes:
+        expanded.append((name, command, extensions, []))
+        if optimize and is_morpho(name):
+            expanded.append(
+                ("morpho -O", command, extensions, list(MORPHO_OPTIMIZE_ARGS))
+            )
+    return expanded
 
 
 def matches_filter(name, only):
@@ -148,9 +171,10 @@ def read_param(folder):
     return line[0].strip()
 
 
-def run(name, command, source, param, cwd):
+def run(name, command, source, param, cwd, extra=None):
+    extra = extra or []
     shown = [name, source.name]
-    cmd = [command, source.name]
+    cmd = [command, *extra, source.name]
     if param is not None:
         shown.append(param)
         cmd.append(param)
@@ -176,22 +200,22 @@ def benchmark(folder, runtimes, samples):
     param = read_param(folder)
     print(green(folder.name))
     results = {}
-    for name, command, extensions in runtimes:
+    for label, command, extensions, extra in runtimes:
         source = pick_source(folder, extensions)
         if source is None:
             continue
         times = []
         for _ in range(samples):
-            elapsed = run(name, command, source, param, folder)
+            elapsed = run(label, command, source, param, folder, extra=extra)
             if elapsed is not None:
                 times.append(elapsed)
         if times:
-            results[name] = min(times)
+            results[label] = min(times)
     return results
 
 
-def display(names, rows, runtimes):
-    langs = [name for name, _, _ in runtimes if any(name in row for row in rows)]
+def display(names, rows, columns):
+    langs = [name for name in columns if any(name in row for row in rows)]
     width = max([15] + [len(n) for n in names] + [8])
     lang_width = max([8] + [len(lang) for lang in langs], default=8)
 
@@ -236,6 +260,12 @@ def parse_args():
         action="store_true",
         help="show detected languages and benchmarks without running them",
     )
+    parser.add_argument(
+        "-O",
+        "--optimize",
+        action="store_true",
+        help='also time morpho with -O --eval "import bytecodeoptimizer"',
+    )
     return parser.parse_args()
 
 
@@ -252,12 +282,15 @@ def main():
             print("error: --languages is empty", file=sys.stderr)
             return 2
 
-    runtimes = detect_runtimes(lang_filter)
+    runtimes = expand_runtimes(detect_runtimes(lang_filter), args.optimize)
     if not runtimes:
         print("error: no supported language interpreters found on PATH", file=sys.stderr)
         return 1
 
-    print("Detected languages: " + ", ".join(name for name, _, _ in runtimes))
+    labels = [label for label, _, _, _ in runtimes]
+    print("Detected languages: " + ", ".join(labels))
+    if args.optimize:
+        print('Morpho optimization: also running with -O --eval "import bytecodeoptimizer"')
 
     benches = []
     for folder in args.folder:
@@ -285,9 +318,9 @@ def main():
         print("Benchmarks:")
         for bench in benches:
             present = []
-            for name, _, exts in runtimes:
+            for label, _, exts, _ in runtimes:
                 if pick_source(bench, exts):
-                    present.append(name)
+                    present.append(label)
             extra = f"  [{', '.join(present)}]" if present else ""
             print(f"  {bench.name}{extra}")
         return 0
@@ -299,7 +332,7 @@ def main():
         rows.append(benchmark(bench, runtimes, args.samples))
         names.append(bench.name)
     print()
-    display(names, rows, runtimes)
+    display(names, rows, labels)
     print("--End testing-----------------------")
     return 0
 
