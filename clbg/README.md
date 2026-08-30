@@ -1,12 +1,16 @@
 # Computer Language Benchmarks Game
 
-This folder contains implementations of the [Computer Language Benchmark Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/index.html) test programs in morpho, as well as a simple script to obtain benchmark data. Implementations in other languages were selected to be relatively similar to the same implementation style.
+This folder contains implementations of the [Computer Language Benchmark Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/index.html) test programs in morpho. Implementations in other languages were selected to be relatively similar to the same implementation style. Run them with the common runner:
+
+```
+python3 tools/benchmark.py clbg
+```
 
 All files derived from CLBG are subject to the BSD license provided in the original (see LICENSE file). The new .morpho files are (c) T J Atherton, but provided under the same license.
 
 ## Example results
 
-These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They represent the output of the benchmark.py script which yields the shortest time obtained when each was run 10 times.
+These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They represent the output of `tools/benchmark.py`, which yields the shortest time obtained when each was run 10 times.
 
                     morpho6  python3.9 python3.12 lua      ruby     perl    
     BinaryTrees     1.54     3.64     1.68     0.65     0.98     1.13    
