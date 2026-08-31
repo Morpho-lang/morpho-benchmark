@@ -1,16 +1,18 @@
-# morpho-benchmarks
+# morpho-benchmark
 
-This folder includes a variety of programs to assist in benchmarking [morpho](https://github.com/Morpho-lang/morpho)'s performance. The tests are divided into several folders:
+This repository includes a variety of programs to assist in benchmarking [morpho](https://github.com/Morpho-lang/morpho)'s performance. The tests are divided into several folders:
 
 * clbg - Benchmarks from the [Computer Language Benchmark Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/index.html), intended to compare morpho to other languages on similar test problems.
 
-* language - Benchmarks for language features.
+* language - Benchmarks for various language features, with equivalent implementations in other dynamic languages.
 
-* other - Interesting problems, some of which are provided in multiple languages.
+* other - Interesting programs with real workflows, with equivalent implementations in other languages.
 
 * problems - Shape optimization problems that aim to represent typical morpho use cases.
 
-* functionals - Morpho-only functional map kernels (`total` / `gradient` / `fieldgradient`).
+* functionals - Morpho-only functional map kernels (`total` / `gradient` / `fieldgradient`) intended to test performance of the `geometry` package.
+
+Where relevant, implementations are provided in Python, Lua, wren, Ruby and Perl. 
 
 ## Running benchmarks
 
