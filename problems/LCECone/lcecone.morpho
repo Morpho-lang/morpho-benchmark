@@ -1,0 +1,89 @@
+// LCE disk with an imprinted +1 azimuthal director → cone (optimize4 L-BFGS).
+// Requires: morphopm install optimize4
+
+import meshtools
+import meshgen
+import optimize4
+
+var W = 80
+var mu = 1.0
+var lambda_par = 0.9
+var lambda_perp = 1/sqrt(lambda_par)
+var I2 = IdentityMatrix(2)
+var expected_height = sqrt(lambda_perp^2 - lambda_par^2)
+var kmc = 0.01
+var kequi = 0.05
+var rcore = 0.2
+
+var dom = CircularDomain([0, 0], 1)
+var mg = MeshGen(dom, [-1..1:0.12, -1..1:0.12], quiet=true)
+var m2 = mg.build()
+m2.addgrade(1)
+var mref = ChangeMeshDimension(m2, 3)
+var m = mref.clone()
+
+var Ctarget = Field(mref, IdentityMatrix(2), grade=2)
+var faces = mref.connectivitymatrix(0, 2)
+for (fid in 0...mref.count(2)) {
+    var vids = faces.rowindices(fid)
+    var x0 = mref.vertexposition(vids[0])
+    var x1 = mref.vertexposition(vids[1])
+    var x2 = mref.vertexposition(vids[2])
+    var c = (x0 + x1 + x2)/3
+    var rho = sqrt(c[0]^2 + c[1]^2)
+    var nn = Matrix([1.0, 0.0])
+    if (rho > 1e-8) nn = Matrix([-c[1]/rho, c[0]/rho])
+    var lp = lambda_par
+    var lt = lambda_perp
+    if (rho < rcore) {
+        var t = (rho/rcore)^2
+        lp = 1 + t*(lambda_par - 1)
+        lt = 1 + t*(lambda_perp - 1)
+    }
+    var e0 = Matrix([x1[0]-x0[0], x1[1]-x0[1]])
+    var e1 = Matrix([x2[0]-x0[0], x2[1]-x0[1]])
+    var A = lp^2 * nn.outer(nn) + lt^2 * (I2 - nn.outer(nn))
+    var Ae0 = A*e0
+    var Ae1 = A*e1
+    var G0 = Matrix([[e0.inner(e0), e0.inner(e1)],
+                     [e0.inner(e1), e1.inner(e1)]])
+    var Ae = Matrix([[e0.inner(Ae0), e0.inner(Ae1)],
+                     [e1.inner(Ae0), e1.inner(Ae1)]])
+    Ctarget[2, fid] = Ae * G0.inverse()
+}
+
+for (i in 0...m.count()) {
+    var x = m.vertexposition(i)
+    var rho = sqrt(x[0]^2 + x[1]^2)
+    var z = 0.55*expected_height*(1 - rho)
+    m.setvertexposition(i, Matrix([x[0], x[1], z]))
+}
+
+fn stretch(x) {
+    var C = 2*cgtensor() + I2
+    var Ct = Ctarget[2, elementid()]
+    var D = C - Ct
+    return 0.5*mu*(D*D).trace()
+}
+
+var elastic = AreaIntegral(stretch, reference=mref, weightByReference=true)
+var problem = OptimizationProblem(m)
+problem.addEnergy(elastic)
+problem.addEnergy(MeanCurvatureSq(), prefactor=kmc)
+problem.addEnergy(EquiElement(), prefactor=kequi)
+
+var centerid = 0
+var farid = 0
+var minr = 1e9
+var maxr = -1.0
+for (i in 0...m.count()) {
+    var x = m.vertexposition(i)
+    var rr = x[0]^2 + x[1]^2
+    if (rr < minr) { minr = rr; centerid = i }
+    if (rr > maxr) { maxr = rr; farid = i }
+}
+var fadapt = FixAdapter(ProblemAdapter(problem, m), [3*centerid, 3*centerid+1, 3*farid+1])
+var opt = LBFGSController(fadapt, verbosity="silent")
+var conv = opt.optimize(W)
+print conv
+print elastic.total(m)

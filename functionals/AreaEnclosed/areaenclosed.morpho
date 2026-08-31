@@ -1,0 +1,12 @@
+// AreaEnclosed.gradient on a closed ellipse. Analytic shape gradient.
+
+import meshtools
+
+var N = 280000
+var Np = 100
+
+var m = LineMesh(fn (t) [2*cos(t), sin(t)], -Pi...Pi:Pi/Np, closed=true)
+var la = AreaEnclosed()
+var g
+for (i in 1..N) g = la.gradient(m)
+print g.norm()

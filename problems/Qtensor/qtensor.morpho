@@ -1,0 +1,47 @@
+// Q-tensor on a disk: Landau + boundary anchoring + GradSq (optimize4 L-BFGS).
+// Requires: morphopm install optimize4
+
+import meshtools
+import meshgen
+import optimize4
+
+var W = 240
+var rho = 1.3
+var EA = 3
+var K = 0.01
+var a2 = (1-rho)
+var a4 = (1+rho)/rho^2
+
+var dom = CircularDomain([0, 0], 1)
+var mg = MeshGen(dom, [-1..1:0.1, -1..1:0.1], quiet=true)
+var m = ChangeMeshDimension(mg.build(), 3)
+m.addgrade(1)
+var q = Field(m, fn (x,y,z) Matrix([0.02*x, 0.02*y]))
+var bnd = Selection(m, boundary=true)
+bnd.addgrade(0)
+
+fn landau(x, qt) {
+    var n = qt.norm()
+    var n2 = n*n
+    return a2*n2 + a4*n2*n2
+}
+fn anchoring(x, qt) {
+    var t = tangent()
+    var wxx = t[0]*t[0]-0.5
+    var wxy = t[0]*t[1]
+    return (qt[0]-wxx)^2+(qt[1]-wxy)^2
+}
+
+var bulk = AreaIntegral(landau, q)
+var anchor = LineIntegral(anchoring, q)
+var elastic = GradSq(q)
+var problem = OptimizationProblem(m)
+problem.addEnergy(bulk)
+problem.addEnergy(anchor, selection=bnd, prefactor=EA)
+problem.addEnergy(elastic, prefactor=K)
+
+var opt = LBFGSController(ProblemAdapter(problem, q), verbosity="silent")
+var conv = opt.optimize(W)
+print conv
+print bulk.total(m)
+print elastic.total(m)

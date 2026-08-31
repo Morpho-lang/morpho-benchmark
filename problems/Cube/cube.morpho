@@ -1,0 +1,35 @@
+// Area at fixed enclosed volume (optimize4 SQP).
+// Refine first so the solve is on a mesh large enough for threading.
+// Requires: morphopm install optimize4
+
+import meshtools
+import optimize4
+
+var W = 50
+var nrefine = 5
+
+var m = PolyhedronMesh([[-0.5, -0.5, -0.5],
+                        [ 0.5, -0.5, -0.5],
+                        [-0.5,  0.5, -0.5],
+                        [ 0.5,  0.5, -0.5],
+                        [-0.5, -0.5,  0.5],
+                        [ 0.5, -0.5,  0.5],
+                        [-0.5,  0.5,  0.5],
+                        [ 0.5,  0.5,  0.5]],
+                       [[0,1,3,2], [4,5,7,6],
+                        [0,1,5,4], [3,2,6,7],
+                        [0,2,6,4], [1,3,7,5]])
+
+for (i in 1..nrefine) {
+    var refmap = MeshRefiner([m]).refine()
+    m = refmap[m]
+}
+
+var problem = OptimizationProblem(m)
+problem.addEnergy(Area())
+problem.addConstraint(VolumeEnclosed())
+var opt = SQPController(ProblemAdapter(problem, m), verbosity="silent")
+var conv = opt.optimize(W)
+print conv
+print Area().total(m)
+print VolumeEnclosed().total(m)

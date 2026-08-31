@@ -1,0 +1,14 @@
+// Nematic.fieldgradient on a disk with a slightly randomized director.
+
+import meshtools
+
+var N = 470
+
+var m = AreaMesh(fn (u,v) [u, v, 0], -1..1:0.1, -1..1:0.1)
+m.addgrade(1)
+var n = Field(m, fn (x,y,z) Matrix([1, 0.2*random(1)-0.1, 0]))
+
+var lnem = Nematic(n)
+var fg
+for (i in 1..N) fg = lnem.fieldgradient(n, m)
+print fg.linearize().norm()

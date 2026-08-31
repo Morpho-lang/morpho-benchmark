@@ -1,0 +1,22 @@
+// AreaIntegral of a Landau polynomial. User-closure integrand.
+
+import meshtools
+
+var N = 4500
+var rho = 1.3
+var a2 = 1-rho
+var a4 = (1+rho)/rho^2
+
+var m = AreaMesh(fn (u,v) [u, v, 0], 0..1:0.1, 0..1:0.1)
+m.addgrade(1)
+var q = Field(m, fn (x,y,z) Matrix([0.01*random(1), 0.01*random(1)]))
+
+fn landau(x, qv) {
+    var qt2 = qv.inner(qv)
+    return a2*qt2 + a4*qt2*qt2
+}
+
+var E = AreaIntegral(landau, q)
+var t
+for (i in 1..N) t = E.total(m)
+print t

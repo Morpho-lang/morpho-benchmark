@@ -9,7 +9,7 @@ python3 tools/benchmark.py language
 python3 tools/benchmark.py -O language
 ```
 
-The runner times the whole process. Use `-O` to also time morpho with `-O --eval "import bytecodeoptimizer"`.
+The runner times the whole process. Use `-O` to also time morpho with `--eval "import bytecodeoptimizer" -O`.
 
 ## Isolates
 

@@ -1,0 +1,22 @@
+// Neighbor-query maps: MeanCurvatureSq on an implicit sphere, EquiElement
+// on a stretched disk.
+
+import meshtools
+import implicitmesh
+
+var Nmc = 200
+var Neq = 350
+
+var sphere = ImplicitMeshBuilder(fn (x,y,z) x^2+y^2+z^2-1).build(stepsize=0.2)
+var lmc = MeanCurvatureSq()
+var g
+for (i in 1..Nmc) g = lmc.gradient(sphere)
+
+var m = AreaMesh(fn (u,v) [u, v, 0], 0..1:0.05, 0..1:0.05)
+for (i in 0...m.count()) {
+    var x = m.vertexposition(i)
+    m.setvertexposition(i, Matrix([x[0], x[1]*(0.4 + 0.8*x[0]), 0]))
+}
+var leq = EquiElement()
+for (i in 1..Neq) g = leq.gradient(m)
+print g.norm()

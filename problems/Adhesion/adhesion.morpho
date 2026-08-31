@@ -1,6 +1,9 @@
-import graphics
+// Elastic sphere adhering to a plane (optimize4 PGD).
+// Equality contact constraint on the growing attach set.
+// Requires: morphopm install optimize4
+
 import meshtools
-import shapeopt
+import optimize4
 
 var m = Mesh("sphere.mesh")
 var mref = Mesh("sphere.mesh")
@@ -10,25 +13,25 @@ le.poissonratio = 0.4
 
 var y0 = -1
 var lf = ScalarPotential(
-  fn (x,y,z) (y-y0), // Allowed region should be positive
+  fn (x,y,z) (y-y0),
   fn (x,y,z) Matrix([0,1,0])
 )
 
-// Find boundary edges and add in vertices
 var bnd = Selection(m, boundary=true)
 bnd.addgrade(0)
 
-var s = ShapeOptimizer(m)
-s.addenergy(le)
+var problem = OptimizationProblem(m)
+problem.addEnergy(le)
+var levelset = problem.addLocalConstraint(lf)
 
-var levelset=s.addlocalconstraint(lf)
-
-s.stepsize=0.1
-
-for (i in 1..1) {
+for (i in 1..12) {
   var lower = Selection(m, fn (x,y,z) y<-0.9)
   var attach = bnd.intersection(lower)
-  levelset.selection=attach
-
-  s.relax(50)
+  levelset.selection = attach
+  var opt = ProjectedGradientDescentController(ProblemAdapter(problem, m),
+                                               verbosity="silent")
+  opt._reprojectquiet = true
+  opt.optimize(50)
 }
+
+print le.total(m)

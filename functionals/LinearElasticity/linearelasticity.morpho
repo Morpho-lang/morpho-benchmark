@@ -1,0 +1,18 @@
+// LinearElasticity.gradient on a stretched clone of the reference mesh.
+
+import meshtools
+
+var N = 1400
+
+var mref = AreaMesh(fn (u,v) [u, v, 0], 0..1:0.05, 0..1:0.05)
+var m = mref.clone()
+for (i in 0...m.count()) {
+    var x = m.vertexposition(i)
+    m.setvertexposition(i, Matrix([1.2*x[0], 0.8*x[1], 0]))
+}
+
+var le = LinearElasticity(mref)
+le.poissonratio = 0.4
+var g
+for (i in 1..N) g = le.gradient(m)
+print g.norm()

@@ -15,6 +15,7 @@ import argparse
 import os
 import shutil
 import statistics
+import struct
 import subprocess
 import sys
 import time
@@ -22,6 +23,7 @@ from pathlib import Path
 
 SAMPLES = 5
 CV_LIMIT = 0.01
+SWEEP_SENTINEL = "sweep"
 
 # Commands to look for, in preference order. Versioned Python binaries are
 # listed separately so multiple installed CPython versions can be compared.
@@ -49,8 +51,10 @@ DISPLAY_NAMES = {
 SKIP_DIRS = {"tools", "__pycache__"}
 SKIP_FILES = {"benchmark.py"}
 
-# morpho6 -O enables optimization once bytecodeoptimizer is imported.
-MORPHO_OPTIMIZE_ARGS = ("-O", "--eval", "import bytecodeoptimizer")
+# -O compiles with the optimizer; --eval imports bytecodeoptimizer first so
+# morpho_setoptimizer is registered before the file is compiled.
+# Keep -wN as one token (attached form is unambiguous).
+MORPHO_OPTIMIZE_ARGS = ("--eval", "import bytecodeoptimizer", "-O")
 
 
 def green(text):
@@ -69,19 +73,233 @@ def is_morpho(name):
     return name.startswith("morpho")
 
 
-def expand_runtimes(runtimes, optimize):
+def _read_int(path):
+    try:
+        return int(Path(path).read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _darwin_pcores():
+    for key in ("hw.perflevel0.physicalcpu", "hw.physicalcpu"):
+        try:
+            n = int(
+                subprocess.check_output(
+                    ["sysctl", "-n", key],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+            )
+        except (OSError, ValueError, subprocess.CalledProcessError):
+            continue
+        if n > 0:
+            return n, f"darwin {key}"
+    return None, None
+
+
+def _linux_pcores():
+    """Unique physical cores in the highest-frequency (or capacity) class."""
+    cpu_root = Path("/sys/devices/system/cpu")
+    if not cpu_root.is_dir():
+        return None, None
+    groups = {}
+    used_freq = False
+    for cpu in cpu_root.iterdir():
+        if not cpu.name.startswith("cpu") or not cpu.name[3:].isdigit():
+            continue
+        key = _read_int(cpu / "cpufreq" / "cpuinfo_max_freq")
+        if key is not None:
+            used_freq = True
+        else:
+            key = _read_int(cpu / "cpu_capacity")
+        if key is None:
+            continue
+        pkg = _read_int(cpu / "topology" / "physical_package_id")
+        core = _read_int(cpu / "topology" / "core_id")
+        ident = (pkg, core) if pkg is not None and core is not None else cpu.name
+        groups.setdefault(key, set()).add(ident)
+    if not groups:
+        return None, None
+    n = len(groups[max(groups)])
+    if n <= 0:
+        return None, None
+    src = "linux cpuinfo_max_freq" if used_freq else "linux cpu_capacity"
+    return n, src
+
+
+def _windows_pcores():
+    """Physical cores with EfficiencyClass 0 (P-cores on hybrid CPUs)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return None, None
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_info = kernel32.GetLogicalProcessorInformationEx
+    get_info.argtypes = [
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    get_info.restype = wintypes.BOOL
+    relation_core = 0
+    needed = wintypes.DWORD(0)
+    if get_info(relation_core, None, ctypes.byref(needed)):
+        return None, None
+    if ctypes.get_last_error() != 122:  # ERROR_INSUFFICIENT_BUFFER
+        return None, None
+    buf = ctypes.create_string_buffer(needed.value)
+    if not get_info(relation_core, buf, ctypes.byref(needed)):
+        return None, None
+    data = buf.raw
+    offset = 0
+    pcores = 0
+    while offset + 10 <= needed.value:
+        rel, size, _flags, efficiency = struct.unpack_from("<IIBB", data, offset)
+        if size < 10:
+            break
+        if rel == relation_core and efficiency == 0:
+            pcores += 1
+        offset += size
+    if pcores <= 0:
+        return None, None
+    return pcores, "windows EfficiencyClass"
+
+
+def performance_core_guess():
+    """Best-effort (P-core count, source). Falls back to os.cpu_count()."""
+    if sys.platform == "darwin":
+        n, src = _darwin_pcores()
+        if n is not None:
+            return n, src
+    elif sys.platform.startswith("linux"):
+        n, src = _linux_pcores()
+        if n is not None:
+            return n, src
+    elif sys.platform == "win32":
+        n, src = _windows_pcores()
+        if n is not None:
+            return n, src
+    n = os.cpu_count()
+    if n and n > 0:
+        return n, "os.cpu_count"
+    return None, None
+
+
+def soft_worker_limit(pcores):
+    """Largest -w that should stay on P-cores: P-1, or 1 on a single core."""
+    if not pcores or pcores < 1:
+        return None
+    return max(1, pcores - 1)
+
+
+def parse_workers(text):
+    """Parse -w SPEC: N, sweep (1..P-1), N-M / N..M, or a comma list."""
+    if text is None:
+        return None
+    s = text.strip().lower()
+    if s == SWEEP_SENTINEL:
+        return SWEEP_SENTINEL
+
+    if "," in s:
+        try:
+            vals = [int(p.strip()) for p in s.split(",") if p.strip()]
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                f"invalid -w list {text!r}"
+            ) from exc
+        if not vals or any(n < 1 for n in vals):
+            raise argparse.ArgumentTypeError("-w values must be >= 1")
+        return vals
+
+    for sep in ("..", "-"):
+        if sep in s:
+            left, right = s.split(sep, 1)
+            if left.strip().isdigit() and right.strip().isdigit():
+                a, b = int(left), int(right)
+                if a < 1 or b < 1:
+                    raise argparse.ArgumentTypeError("-w values must be >= 1")
+                if b < a:
+                    raise argparse.ArgumentTypeError(
+                        f"-w range start must be <= end ({text!r})"
+                    )
+                return list(range(a, b + 1))
+
+    try:
+        n = int(s)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"invalid -w {text!r} (use N, sweep, N-M, or N,M,…)"
+        ) from exc
+    if n < 1:
+        raise argparse.ArgumentTypeError("-w values must be >= 1")
+    return [n]
+
+
+def worker_from_label(label):
+    """Extract N from a -wN column label, or None."""
+    for prefix in ("morpho -O -w", "morpho -w", "-w"):
+        if label.startswith(prefix) and label[len(prefix) :].isdigit():
+            return int(label[len(prefix) :])
+    return None
+
+
+def speedup_groups(columns):
+    """Group sweep columns by variant: unoptimized vs morpho -O."""
+    groups = []
+    seen = set()
+    for label in columns:
+        w = worker_from_label(label)
+        if w is None:
+            continue
+        kind = "morpho -O" if " -O " in label else ""
+        if kind in seen:
+            continue
+        seen.add(kind)
+        series = []
+        for col in columns:
+            cw = worker_from_label(col)
+            if cw is None:
+                continue
+            col_kind = "morpho -O" if " -O " in col else ""
+            if col_kind == kind:
+                series.append((cw, col))
+        series.sort()
+        groups.append((kind, series))
+    return groups
+
+
+def expand_runtimes(runtimes, optimize, workers=None):
     """Turn detected interpreters into runnable variants.
 
     With -O, each morpho interpreter is included twice: once as-is and once
-    with -O --eval "import bytecodeoptimizer".
+    with --eval "import bytecodeoptimizer" -O. --workers appends -wN (one
+    token) on Morpho only; a list of worker counts expands into one column
+    per count. Extra flags are -wN, then the -O preamble, then the file.
     """
+    worker_list = workers if workers else [None]
+    multi = workers is not None and len(workers) > 1
     expanded = []
     for name, command, extensions in runtimes:
-        expanded.append((name, command, extensions, []))
-        if optimize and is_morpho(name):
-            expanded.append(
-                ("morpho -O", command, extensions, list(MORPHO_OPTIMIZE_ARGS))
-            )
+        if not is_morpho(name):
+            expanded.append((name, command, extensions, []))
+            continue
+        variants = [(name, [])]
+        if optimize:
+            variants.append(("morpho -O", list(MORPHO_OPTIMIZE_ARGS)))
+        for w in worker_list:
+            extra_w = [f"-w{w}"] if w is not None else []
+            for base_label, opt_extra in variants:
+                extra = extra_w + opt_extra
+                if w is None or not multi:
+                    label = base_label
+                elif base_label == "morpho -O":
+                    label = f"morpho -O -w{w}"
+                elif len(variants) > 1:
+                    label = f"morpho -w{w}"
+                else:
+                    label = f"-w{w}"
+                expanded.append((label, command, extensions, extra))
     return expanded
 
 
@@ -92,11 +310,40 @@ def matches_filter(name, only):
     return any(name == item or name.startswith(item) for item in only)
 
 
-def detect_runtimes(only=None):
-    """Return [(name, command_path, extensions), ...] for commands on PATH."""
+def resolve_morpho(spec):
+    """Resolve --morpho EXE to an absolute path, or raise FileNotFoundError."""
+    given = Path(spec).expanduser()
+    if given.is_file():
+        return str(given.resolve())
+    path = shutil.which(spec)
+    if path:
+        return os.path.realpath(path)
+    raise FileNotFoundError(f"morpho executable not found: {spec}")
+
+
+def detect_runtimes(only=None, morpho=None):
+    """Return [(name, command_path, extensions), ...] for commands on PATH.
+
+    --morpho EXE replaces morpho6/morpho from PATH so a just-built binary can
+    be timed without changing PATH.
+    """
     seen = set()
     found = []
+    skip_path_morpho = False
+    if morpho is not None:
+        path = resolve_morpho(morpho)
+        base = Path(path).name
+        label = DISPLAY_NAMES.get(base, base)
+        if not is_morpho(label):
+            label = "morpho"
+        if matches_filter(label, only) or matches_filter(base, only):
+            found.append((label, path, (".morpho",)))
+            seen.add(os.path.realpath(path))
+            skip_path_morpho = True
+
     for name, exts in CANDIDATES:
+        if skip_path_morpho and name in ("morpho6", "morpho"):
+            continue
         label = DISPLAY_NAMES.get(name, name)
         if not (matches_filter(name, only) or matches_filter(label, only)):
             continue
@@ -126,42 +373,31 @@ def sources_in(folder, extensions):
     return [p for p in folder.iterdir() if is_source(p, extensions)]
 
 
-def has_sources(folder, extensions):
-    if not folder.is_dir() or folder.name in SKIP_DIRS or folder.name.startswith("."):
-        return False
-    return any(is_source(p, extensions) for p in folder.iterdir())
+def _path_skipped(relative_parts):
+    """True if any directory on the relative path is hidden or in SKIP_DIRS."""
+    return any(part.startswith(".") or part in SKIP_DIRS for part in relative_parts)
 
 
 def discover(target, extensions):
     """Find benchmark directories under target.
 
-    A suite folder (e.g. clbg/) yields its immediate children that contain
-    sources. A single benchmark folder is used as-is. The repository root
-    expands one extra level so every suite is included.
+    Recursively collects every directory that contains a source file whose
+    suffix is in extensions, skipping hidden paths and SKIP_DIRS (tools,
+    __pycache__).
     """
     target = Path(target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Not a directory: {target}")
 
-    children = sorted(
-        p
-        for p in target.iterdir()
-        if p.is_dir() and not p.name.startswith(".") and p.name not in SKIP_DIRS
-    )
-    benches = [p for p in children if has_sources(p, extensions)]
-    if benches:
-        return benches
-    if has_sources(target, extensions):
-        return [target]
-
-    deeper = []
-    for child in children:
-        deeper.extend(
-            p
-            for p in sorted(child.iterdir())
-            if p.is_dir() and has_sources(p, extensions)
-        )
-    return deeper
+    found = set()
+    for path in target.rglob("*"):
+        if not is_source(path, extensions):
+            continue
+        rel = path.relative_to(target)
+        if _path_skipped(rel.parts[:-1]):
+            continue
+        found.add(path.parent)
+    return sorted(found)
 
 
 def pick_source(folder, extensions):
@@ -198,27 +434,42 @@ def sample_cv(times):
     return statistics.stdev(times) / mean
 
 
-def run(name, command, source, param, cwd, extra=None):
+def morpho_run_failed(stderr):
+    """True if morpho printed a fatal CLI error (some still exit 0)."""
+    if not stderr:
+        return False
+    lower = stderr.lower()
+    return "could not open file" in lower or "unknown option" in lower
+
+
+def run(command, source, param, cwd, extra=None):
     extra = extra or []
-    shown = [name, source.name]
     cmd = [command, *extra, source.name]
     if param is not None:
-        shown.append(param)
         cmd.append(param)
 
+    shown = [Path(command).name, *extra, source.name]
+    if param is not None:
+        shown.append(param)
     print(" ".join(shown))
+
     start = time.perf_counter()
     try:
         result = subprocess.run(
             cmd,
             cwd=cwd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
         )
     except OSError:
         return None
     elapsed = time.perf_counter() - start
-    if result.returncode != 0:
+    err = result.stderr or ""
+    if result.returncode != 0 or morpho_run_failed(err):
+        line = err.strip().splitlines()
+        if line:
+            print(f"  {line[0]}", file=sys.stderr)
         return None
     return elapsed
 
@@ -227,7 +478,7 @@ def run_batch(label, command, source, param, folder, extra, count):
     times = []
     failures = 0
     while len(times) < count and failures < count:
-        elapsed = run(label, command, source, param, folder, extra=extra)
+        elapsed = run(command, source, param, folder, extra=extra)
         if elapsed is None:
             failures += 1
             continue
@@ -315,13 +566,75 @@ def display(names, rows, columns):
         print(line)
 
 
-def parse_args():
+def display_speedup(names, rows, columns):
+    """Print speedup vs the first worker in each Morpho sweep series."""
+    groups = speedup_groups(columns)
+    if not groups:
+        return
+    for kind, series in groups:
+        if len(series) < 2:
+            continue
+        w0, col0 = series[0]
+        headers = [f"sp{w}" for w, _ in series[1:]]
+        cells = []
+        for results in rows:
+            base = results.get(col0)
+            t0 = None if base is None else base[0]
+            row = []
+            for w, col in series[1:]:
+                cell = results.get(col)
+                if t0 and cell and cell[0]:
+                    row.append(f"{t0 / cell[0]:.2f}")
+                else:
+                    row.append("-")
+            cells.append(row)
+        title = f"Speedup vs -w{w0}"
+        if kind:
+            title += f" ({kind})"
+        print()
+        print(title)
+        width = max([15] + [len(n) for n in names] + [8])
+        col_w = max([8] + [len(h) for h in headers] + [len(c) for row in cells for c in row], default=8)
+        header = f"{'':<{width}}"
+        for h in headers:
+            header += f" {h:<{col_w}}"
+        print(header)
+        for name, row in zip(names, cells):
+            line = f"{name:<{width}}"
+            for cell in row:
+                line += f" {cell:<{col_w}}"
+            print(line)
+
+
+def build_parser():
     parser = argparse.ArgumentParser(
-        description="Run morpho-benchmark programs in a target folder."
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Run morpho-benchmark programs in a target folder.",
+        epilog="""\
+Suites: clbg, language, other, problems, functionals
+
+Examples:
+  python3 tools/benchmark.py language
+  python3 tools/benchmark.py problems/Cube
+  python3 tools/benchmark.py functionals
+  python3 tools/benchmark.py --list functionals
+  python3 tools/benchmark.py -w 4 problems/Qtensor
+  python3 tools/benchmark.py -w sweep functionals
+  python3 tools/benchmark.py -O -w sweep functionals/Landau
+  python3 tools/benchmark.py --morpho ./morpho6 -O language
+  python3 tools/benchmark.py -n 1 --languages morpho functionals
+
+-w SPEC is Morpho-only: N, sweep (1..P-1), N-M, or N,M,…
+-O also times morpho with --eval "import bytecodeoptimizer" -O.
+--morpho EXE uses that binary instead of morpho6 from PATH.
+A sweep prints times then speedup vs -w1. -O and -w can be combined.
+The runner guesses P-cores (sysctl / sysfs / EfficiencyClass, else os.cpu_count)
+and warns if -w exceeds P-1.
+""",
     )
     parser.add_argument(
         "folder",
-        nargs="+",
+        nargs="*",
         help="Suite or benchmark folder (e.g. clbg, language, problems/Adhesion)",
     )
     parser.add_argument(
@@ -337,6 +650,11 @@ def parse_args():
         help="restrict to these interpreter commands (e.g. morpho,python3,lua)",
     )
     parser.add_argument(
+        "--morpho",
+        metavar="EXE",
+        help="Morpho executable (default: morpho6 from PATH)",
+    )
+    parser.add_argument(
         "--list",
         action="store_true",
         help="show detected languages and benchmarks without running them",
@@ -345,13 +663,24 @@ def parse_args():
         "-O",
         "--optimize",
         action="store_true",
-        help='also time morpho with -O --eval "import bytecodeoptimizer"',
+        help='also time morpho with --eval "import bytecodeoptimizer" -O',
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-w",
+        "--workers",
+        type=parse_workers,
+        metavar="SPEC",
+        help="pass -wN to morpho: N, sweep (1..P-1), N-M, or N,M,… (ignored for other languages)",
+    )
+    return parser
 
 
 def main():
-    args = parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if not args.folder:
+        parser.print_help()
+        return 0
     if args.samples < 1:
         print("error: --samples must be at least 1", file=sys.stderr)
         return 2
@@ -363,15 +692,64 @@ def main():
             print("error: --languages is empty", file=sys.stderr)
             return 2
 
-    runtimes = expand_runtimes(detect_runtimes(lang_filter), args.optimize)
-    if not runtimes:
+    pcores, psrc = performance_core_guess()
+    wlimit = soft_worker_limit(pcores)
+    workers = args.workers
+    if workers == SWEEP_SENTINEL:
+        if wlimit is None:
+            print(
+                "error: -w sweep needs a CPU count (sysctl, sysfs, or os.cpu_count)",
+                file=sys.stderr,
+            )
+            return 2
+        workers = list(range(1, wlimit + 1))
+
+    try:
+        detected = detect_runtimes(lang_filter, morpho=args.morpho)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if not detected:
         print("error: no supported language interpreters found on PATH", file=sys.stderr)
         return 1
 
-    labels = [label for label, _, _, _ in runtimes]
-    print("Detected languages: " + ", ".join(labels))
+    print("Detected languages: " + ", ".join(name for name, _, _ in detected))
+    if pcores is not None:
+        logical = os.cpu_count()
+        host = f"Host CPUs: {pcores} P-cores ({psrc})"
+        if logical and logical != pcores:
+            host += f", {logical} logical"
+        print(host)
+    if args.morpho:
+        morpho_runtime = next(
+            (path for name, path, _ in detected if is_morpho(name)), None
+        )
+        if morpho_runtime:
+            print(f"Morpho executable: {morpho_runtime}")
     if args.optimize:
-        print('Morpho optimization: also running with -O --eval "import bytecodeoptimizer"')
+        print('Morpho optimization: also running with --eval "import bytecodeoptimizer" -O')
+    if workers is not None:
+        if len(workers) == 1:
+            print(f"Morpho workers: -w{workers[0]}")
+        else:
+            print("Morpho workers: " + ", ".join(f"-w{w}" for w in workers))
+        if wlimit is not None:
+            over = sorted({w for w in workers if w > wlimit})
+            if over:
+                shown = ", ".join(f"-w{w}" for w in over)
+                verb = "exceeds" if len(over) == 1 else "exceed"
+                sys.stdout.flush()
+                print(
+                    f"warning: {shown} {verb} guessed P-cores-1 "
+                    f"({wlimit} from {psrc}); extra workers may land on "
+                    f"efficiency cores",
+                    file=sys.stderr,
+                )
+
+    runtimes = expand_runtimes(
+        detected, args.optimize, workers=None if args.list else workers
+    )
+    labels = [label for label, _, _, _ in runtimes]
 
     benches = []
     for folder in args.folder:
@@ -414,6 +792,8 @@ def main():
         names.append(bench.name)
     print()
     display(names, rows, labels)
+    if workers is not None and len(workers) > 1:
+        display_speedup(names, rows, labels)
     print("--End testing-----------------------")
     return 0
 
