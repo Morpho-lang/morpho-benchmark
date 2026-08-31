@@ -1,0 +1,13 @@
+fn f(Int x) { return x }
+fn f(Float x) { return x }
+fn f(x, y) { return x }
+fn f(x, Float y) { return x }
+
+var a = "Hello"
+var n = 20000000
+
+for (i in 1..n) {
+  f(1)
+  f(2.0)
+  f(a, a)
+}

@@ -1,6 +1,4 @@
-/*
- * The 2D Ising Model
- */
+// Monte Carlo simulation of the 2D Ising model.
 
 var N=20 // Size of the board
 var Niter=10000 // Number of iterations in sweeps

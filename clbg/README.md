@@ -10,7 +10,7 @@ All files derived from CLBG are subject to the BSD license provided in the origi
 
 ## Example results
 
-These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They represent the output of `tools/benchmark.py`, which yields the shortest time obtained when each was run 10 times.
+These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They represent an earlier output of `tools/benchmark.py` (shortest of 10 runs). The runner now reports median ± sample standard deviation.
 
                     morpho6  python3.9 python3.12 lua      ruby     perl    
     BinaryTrees     1.54     3.64     1.68     0.65     0.98     1.13    
@@ -23,18 +23,16 @@ These results are from a 1.1Ghz quad core Intel i5 Macbook Air 2020. They repres
 
 ## Future work
 
-Certain benchmarks are presently omitted as they require a few additional features in morpho:
+k-nucleotide is included. Sequence THREE is generated from the fasta PRNG (argument `N` in `in.txt`) rather than read from stdin, because the runner passes a command-line argument rather than piping a FASTA file. Morpho uses `substring` and `Dictionary`; it has no `toupper` and cannot compare strings with `<`, so the sequence is generated in uppercase and key-tie sorting uses A/C/G/T codes.
 
-* String slicing.
-* String case conversion (requires unicode support).
+Still omitted:
 
-* Binary output.
-* Use of Stdin and Stdout via the file class.
+* regex-redux (no regular expressions; we intend to wrap an external library)
+* reverse-complement (stdin/binary-ish FASTA I/O and case conversion)
+* pidigits (arbitrary-precision integers)
 
-* Regular expressions (we intend to wrap an external library for these)
+Additionally, running some tests at full CLBG length requires iteration counts larger than morpho's standard int32 type.
 
-Additionally, running the tests at full length in some cases requires iteration counts that are larger than morpho's standard int32 type.
-
-We also note a few desirable future features for morpho and its library: 
+We also note a few desirable future features for morpho and its library:
 
 * Easy constructors for empty lists

@@ -1,0 +1,5 @@
+fn f(x, y=1) { return x + y }
+
+var z = 0
+for (var i = 0; i < 50000000; i = i + 1) z = f(i)
+print z

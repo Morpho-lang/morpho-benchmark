@@ -1,0 +1,6 @@
+var y = 1.0
+for (var i = 0; i < 70000000; i = i + 1) {
+  Float x = y
+  y = x + 1.0
+}
+print y

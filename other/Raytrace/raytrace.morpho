@@ -1,0 +1,63 @@
+// Cast rays at a sphere and shade the intersection.
+
+fn shade(px, py) {
+  var ox = 0.0
+  var oy = 0.0
+  var oz = -3.0
+
+  var dx = px
+  var dy = py
+  var dz = 1.0
+
+  var cx = 0.0
+  var cy = 0.0
+  var cz = 0.0
+  var r = 1.0
+
+  var ocx = ox - cx
+  var ocy = oy - cy
+  var ocz = oz - cz
+
+  var a = dx * dx + dy * dy + dz * dz
+  var b = 2.0 * (ocx * dx + ocy * dy + ocz * dz)
+  var c = ocx * ocx + ocy * ocy + ocz * ocz - r * r
+
+  var disc = b * b - 4.0 * a * c
+
+  if (disc < 0.0) {
+    return 0.05
+  }
+
+  var brightness = disc / (1.0 + disc)
+
+  if (brightness > 0.5) {
+    return brightness
+  } else {
+    return 0.25 * brightness
+  }
+}
+
+fn benchmark(width, height, reps) {
+  var checksum = 0.0
+  var r = 0
+
+  while (r < reps) {
+    var j = 0
+    while (j < height) {
+      var i = 0
+      while (i < width) {
+        var px = -1.0 + 2.0 * i / (width - 1)
+        var py = -0.75 + 1.5 * j / (height - 1)
+        var s = shade(px, py)
+        checksum += s * (1.0 + 0.0001 * i + 0.00001 * j)
+        i += 1
+      }
+      j += 1
+    }
+    r += 1
+  }
+
+  return checksum
+}
+
+print benchmark(240, 180, 210)

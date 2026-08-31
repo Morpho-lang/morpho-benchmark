@@ -22,7 +22,7 @@ python3 tools/benchmark.py problems/Adhesion
 
 The script detects which interpreters are installed and which language implementations are present in the target, and only runs those combinations. Distinct Python versions on `PATH` (e.g. `python3.12` and `python3.14`) are timed separately. If a benchmark folder contains `in.txt`, the first line is passed as a command-line argument (used by the CLBG programs).
 
-Each program is run several times (10 by default); the reported time is the fastest wall-clock result.
+Each program is run 5 times (change with `-n`). If the sample standard deviation is still 1% or more of the mean, a second batch of 5 is run. The table reports the median wall-clock time ± sample standard deviation.
 
 ```
 python3 tools/benchmark.py --help

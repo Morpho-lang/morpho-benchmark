@@ -1,0 +1,3 @@
+var list = List()
+for (i in 0..30000000-1) list.append(i)
+print list.count()

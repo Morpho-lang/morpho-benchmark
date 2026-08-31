@@ -28,8 +28,7 @@ class NthToggle is Toggle {
   }
 }
 
-var start = System.clock
-var n = 100000
+var n = 1000000
 var val = true
 var toggle = Toggle.new(val)
 
@@ -65,4 +64,3 @@ for (i in 0...n) {
 }
 
 System.print(ntoggle.value)
-System.print("elapsed: %(System.clock - start)")

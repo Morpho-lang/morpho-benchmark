@@ -1,0 +1,5 @@
+fn f(...v) { return v.count() }
+
+var y = 0
+for (var i = 0; i < 14000000; i = i + 1) y = f(i, 1, 2)
+print y

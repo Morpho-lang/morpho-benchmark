@@ -1,0 +1,5 @@
+fn add(x, y) { return x + y }
+
+var y = 0
+for (var i = 0; i < 45000000; i = i + 1) y = add(i, 1)
+print y

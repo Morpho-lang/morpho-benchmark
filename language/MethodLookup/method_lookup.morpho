@@ -1,5 +1,5 @@
 // Method lookup
-var N = 1000000 // Use 10x this in loop to minimize loop overhead 
+var N = 6000000 // Use 10x this in loop to minimize loop overhead 
 
 class Foo {
   init(a) {

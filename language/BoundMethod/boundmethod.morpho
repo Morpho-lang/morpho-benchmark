@@ -1,0 +1,10 @@
+class Foo {
+  init(a) { self.a = a }
+  report() { return self.a }
+}
+
+var obj = Foo(5)
+var m = obj.report
+var y = 0
+for (var i = 0; i < 60000000; i = i + 1) y = m()
+print y

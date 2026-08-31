@@ -34,7 +34,7 @@ class NthToggle(Toggle):
 
 
 def main():
-    NUM = 100000
+    NUM = 1000000
 
     val = 1
     toggle = Toggle(val)

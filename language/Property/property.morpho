@@ -1,0 +1,8 @@
+class Foo {
+  init(a) { self.a = a }
+}
+
+var obj = Foo(5)
+var y = 0
+for (var i = 0; i < 70000000; i = i + 1) y = obj.a
+print y

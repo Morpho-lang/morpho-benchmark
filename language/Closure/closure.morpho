@@ -1,0 +1,6 @@
+var c = 1
+fn f() { return c }
+
+var y = 0
+for (var i = 0; i < 70000000; i = i + 1) y = f()
+print y

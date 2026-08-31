@@ -1,4 +1,4 @@
-// Tests functions and function calls
+// Recursively compute Fibonacci numbers.
 
 fn f(x) {
 	if (x<2) return x

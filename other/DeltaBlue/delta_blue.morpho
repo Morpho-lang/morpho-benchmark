@@ -1,5 +1,4 @@
-// Delta Blue constraint solver benchmark
-// Converted from the wren version
+// One-way constraint solver (DeltaBlue).
 
 var ORDERED
 

@@ -1,8 +1,7 @@
-// Reduce power to multiply 
-var N = 1000000
+var N = 3000000
 var M = 10
 
-fn sqr(x) { return x*x }
+fn sqr(x) { return x * x }
 
 for (k in 1..N) {
   for (i in 1..M) {

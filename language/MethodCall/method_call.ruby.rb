@@ -37,9 +37,7 @@ class NthToggle < Toggle
 end
 
 def main()
-    start = Time.now
-
-    n = 100000
+    n = 1000000
 
     val = 1
     toggle = Toggle.new(val)
@@ -72,8 +70,6 @@ def main()
         val = ntoggle.activate().value()
     end
     if val then puts "true" else puts "false" end
-
-    puts "elapsed: " + (Time.now - start).to_s
 end
 
 main()

@@ -1,0 +1,7 @@
+class Foo {
+  init() { self.x = 1 }
+}
+
+var o = Foo()
+for (var i = 0; i < 15000000; i = i + 1) o = Foo()
+print o.x

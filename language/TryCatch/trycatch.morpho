@@ -1,0 +1,9 @@
+var k = 0
+for (var i = 0; i < 30000000; i = i + 1) {
+  try {
+    k = k + 1
+  } catch {
+    "Error": k = k
+  }
+}
+print k

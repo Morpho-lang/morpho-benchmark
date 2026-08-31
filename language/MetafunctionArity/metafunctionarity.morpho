@@ -1,0 +1,13 @@
+fn f() { return 0 }
+fn f(x) { return 1 }
+fn f(x, y) { return 2 }
+fn f(x, y, z) { return 3 }
+
+var a = "Hello"
+var n = 20000000
+
+for (i in 1..n) {
+  f(1)
+  f(2.0)
+  f(a)
+}

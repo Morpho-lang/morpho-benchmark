@@ -29,8 +29,7 @@ class NthToggle < Toggle {
   }
 }
 
-var start = clock()
-var n = 100000
+var n = 1000000
 var val = true
 var toggle = Toggle(val)
 
@@ -66,4 +65,3 @@ for (i in 0...n) {
 }
 
 print ntoggle.value()
-print "elapsed: ${clock() - start}"

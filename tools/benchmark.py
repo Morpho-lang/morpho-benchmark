@@ -14,12 +14,14 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import statistics
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-SAMPLES = 10
+SAMPLES = 5
+CV_LIMIT = 0.01
 
 # Commands to look for, in preference order. Versioned Python binaries are
 # listed separately so multiple installed CPython versions can be compared.
@@ -33,8 +35,16 @@ CANDIDATES = (
         ("ruby", (".ruby", ".rb")),
         ("perl", (".perl", ".pl")),
         ("wren", (".wren",)),
+        ("wren_cli", (".wren",)),
+        ("wren-cli", (".wren",)),
     ]
 )
+
+# Homebrew and some builds install Wren as wren_cli / wren-cli.
+DISPLAY_NAMES = {
+    "wren_cli": "wren",
+    "wren-cli": "wren",
+}
 
 SKIP_DIRS = {"tools", "__pycache__"}
 SKIP_FILES = {"benchmark.py"}
@@ -46,6 +56,12 @@ MORPHO_OPTIMIZE_ARGS = ("-O", "--eval", "import bytecodeoptimizer")
 def green(text):
     if sys.stdout.isatty():
         return f"\033[32m{text}\033[0m"
+    return text
+
+
+def grey(text):
+    if sys.stdout.isatty():
+        return f"\033[90m{text}\033[0m"
     return text
 
 
@@ -81,7 +97,8 @@ def detect_runtimes(only=None):
     seen = set()
     found = []
     for name, exts in CANDIDATES:
-        if not matches_filter(name, only):
+        label = DISPLAY_NAMES.get(name, name)
+        if not (matches_filter(name, only) or matches_filter(label, only)):
             continue
         path = shutil.which(name)
         if not path:
@@ -90,7 +107,7 @@ def detect_runtimes(only=None):
         if real in seen:
             continue
         seen.add(real)
-        found.append((name, path, exts))
+        found.append((label, path, exts))
     return found
 
 
@@ -171,6 +188,16 @@ def read_param(folder):
     return line[0].strip()
 
 
+def sample_cv(times):
+    """Sample coefficient of variation, or None if undefined."""
+    if len(times) < 2:
+        return None
+    mean = statistics.fmean(times)
+    if mean == 0:
+        return 0.0
+    return statistics.stdev(times) / mean
+
+
 def run(name, command, source, param, cwd, extra=None):
     extra = extra or []
     shown = [name, source.name]
@@ -196,7 +223,31 @@ def run(name, command, source, param, cwd, extra=None):
     return elapsed
 
 
-def benchmark(folder, runtimes, samples):
+def run_batch(label, command, source, param, folder, extra, count):
+    times = []
+    failures = 0
+    while len(times) < count and failures < count:
+        elapsed = run(label, command, source, param, folder, extra=extra)
+        if elapsed is None:
+            failures += 1
+            continue
+        times.append(elapsed)
+    return times
+
+
+def collect_times(label, command, source, param, folder, extra, batch):
+    """Run `batch` samples; if cv is still >= 1%, run one more batch."""
+    times = run_batch(label, command, source, param, folder, extra, batch)
+    if len(times) < 2:
+        return times
+    cv = sample_cv(times)
+    if cv is not None and cv < CV_LIMIT:
+        return times
+    times.extend(run_batch(label, command, source, param, folder, extra, batch))
+    return times
+
+
+def benchmark(folder, runtimes, batch):
     param = read_param(folder)
     print(green(folder.name))
     results = {}
@@ -204,33 +255,63 @@ def benchmark(folder, runtimes, samples):
         source = pick_source(folder, extensions)
         if source is None:
             continue
-        times = []
-        for _ in range(samples):
-            elapsed = run(label, command, source, param, folder, extra=extra)
-            if elapsed is not None:
-                times.append(elapsed)
-        if times:
-            results[label] = min(times)
+        times = collect_times(
+            label, command, source, param, folder, extra, batch
+        )
+        if not times:
+            continue
+        mid = statistics.median(times)
+        err = statistics.stdev(times) if len(times) >= 2 else None
+        results[label] = (mid, err)
+        cv = sample_cv(times)
+        if cv is not None and cv >= CV_LIMIT:
+            print(f"  note: {label} cv={cv:.1%} n={len(times)}")
     return results
+
+
+def format_cell(value):
+    if value is None:
+        return "-"
+    mid, err = value
+    if err is None:
+        return f"{mid:.2f}"
+    return f"{mid:.2f} ± {err:.2f}"
+
+
+def color_cell(plain):
+    if " ± " not in plain:
+        return plain
+    mid, err = plain.split(" ± ", 1)
+    return f"{mid}{grey(' ± ' + err)}"
+
+
+def pad_cell(plain, width):
+    return color_cell(plain) + " " * max(0, width - len(plain))
 
 
 def display(names, rows, columns):
     langs = [name for name in columns if any(name in row for row in rows)]
+    cells = []
+    for results in rows:
+        cells.append([format_cell(results.get(lang)) for lang in langs])
+
     width = max([15] + [len(n) for n in names] + [8])
-    lang_width = max([8] + [len(lang) for lang in langs], default=8)
+    lang_width = max(
+        [8]
+        + [len(lang) for lang in langs]
+        + [len(cell) for row in cells for cell in row],
+        default=8,
+    )
 
     header = f"{'':<{width}}"
     for lang in langs:
         header += f" {lang:<{lang_width}}"
     print(header)
 
-    for name, results in zip(names, rows):
+    for name, row in zip(names, cells):
         line = f"{name:<{width}}"
-        for lang in langs:
-            if lang in results:
-                line += f" {results[lang]:<{lang_width}.2f}"
-            else:
-                line += f" {'-':<{lang_width}}"
+        for cell in row:
+            line += f" {pad_cell(cell, lang_width)}"
         print(line)
 
 
@@ -248,7 +329,7 @@ def parse_args():
         "--samples",
         type=int,
         default=SAMPLES,
-        help=f"runs per program (default: {SAMPLES}); the minimum time is reported",
+        help=f"runs per batch (default: {SAMPLES}); a second batch is added if stdev/mean >= 1%%",
     )
     parser.add_argument(
         "--languages",
