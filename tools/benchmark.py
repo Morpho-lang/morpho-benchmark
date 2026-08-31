@@ -434,12 +434,69 @@ def sample_cv(times):
     return statistics.stdev(times) / mean
 
 
-def morpho_run_failed(stderr):
-    """True if morpho printed a fatal CLI error (some still exit 0)."""
-    if not stderr:
+def morpho_run_failed(text):
+    """True if morpho printed a fatal error (some CLIs still exit 0).
+
+    Runtime `Error 'TAG'` is written to stdout; CLI messages like unknown
+    option go to stderr. Scan the combined log.
+    """
+    if not text:
         return False
-    lower = stderr.lower()
-    return "could not open file" in lower or "unknown option" in lower
+    lower = text.lower()
+    return (
+        "error '" in lower
+        or "could not open file" in lower
+        or "unknown option" in lower
+    )
+
+
+def morpho_fail_line(text):
+    """First log line that looks like a Morpho failure, else the first line."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for ln in lines:
+        low = ln.lower()
+        if (
+            "error '" in low
+            or "could not open file" in low
+            or "unknown option" in low
+        ):
+            return ln
+    return lines[0] if lines else None
+
+
+def morpho_version(command):
+    """First line of `morpho --version`, or None."""
+    for flag in ("--version", "-v"):
+        try:
+            result = subprocess.run(
+                [command, flag],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        text = (result.stdout or "").strip() or (result.stderr or "").strip()
+        if text:
+            return text.splitlines()[0]
+    return None
+
+
+def report_morpho(detected):
+    """Print each Morpho binary's path and --version."""
+    seen = set()
+    for name, path, _ in detected:
+        if not is_morpho(name):
+            continue
+        real = os.path.realpath(path)
+        if real in seen:
+            continue
+        seen.add(real)
+        print(f"Morpho executable: {real}")
+        ver = morpho_version(path)
+        if ver:
+            print(f"Morpho version: {ver}")
 
 
 def run(command, source, param, cwd, extra=None):
@@ -452,24 +509,27 @@ def run(command, source, param, cwd, extra=None):
     if param is not None:
         shown.append(param)
     print(" ".join(shown))
+    sys.stdout.flush()
 
+    morpho = is_morpho(Path(command).name) or source.suffix == ".morpho"
     start = time.perf_counter()
     try:
         result = subprocess.run(
             cmd,
             cwd=cwd,
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE if morpho else subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
         )
     except OSError:
         return None
     elapsed = time.perf_counter() - start
-    err = result.stderr or ""
-    if result.returncode != 0 or morpho_run_failed(err):
-        line = err.strip().splitlines()
+    log = (result.stderr or "") + ((result.stdout or "") if morpho else "")
+    if result.returncode != 0 or (morpho and morpho_run_failed(log)):
+        line = morpho_fail_line(log)
         if line:
-            print(f"  {line[0]}", file=sys.stderr)
+            sys.stdout.flush()
+            print(f"  {line}", file=sys.stderr)
         return None
     return elapsed
 
@@ -720,12 +780,7 @@ def main():
         if logical and logical != pcores:
             host += f", {logical} logical"
         print(host)
-    if args.morpho:
-        morpho_runtime = next(
-            (path for name, path, _ in detected if is_morpho(name)), None
-        )
-        if morpho_runtime:
-            print(f"Morpho executable: {morpho_runtime}")
+    report_morpho(detected)
     if args.optimize:
         print('Morpho optimization: also running with --eval "import bytecodeoptimizer" -O')
     if workers is not None:
