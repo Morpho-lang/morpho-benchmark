@@ -11,7 +11,7 @@ This folder contains a few selected problems intended to reproduce typical morph
 * Tactoid - Coupled mesh + director tactoid (SQP).
 * Filament - Elastic filament on a sphere (penalty method, fixed top vertex).
 * Cube - Area at fixed volume, in-memory cube, five refines, then one SQP.
-* Qtensor - Landau + anchoring + GradSq on a disk (L-BFGS).
+* Qtensor / QTensorTyped - Landau + anchoring + GradSq on a disk (L-BFGS, always `W` steps). Typed kernels vs untyped.
 * LCECone - LCE azimuthal cone (`AreaIntegral` of `cgtensor()`) (L-BFGS).
 
 ```

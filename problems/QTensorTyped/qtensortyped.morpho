@@ -20,12 +20,12 @@ var q = Field(m, fn (x,y,z) Matrix([0.02*x, 0.02*y]))
 var bnd = Selection(m, boundary=true)
 bnd.addgrade(0)
 
-fn landau(x, qt) {
+fn landau(Matrix x, Matrix qt) {
     var n = qt.norm()
     var n2 = n*n
     return a2*n2 + a4*n2*n2
 }
-fn anchoring(x, qt) {
+fn anchoring(Matrix x, Matrix qt) {
     var t = tangent()
     var wxx = t[0]*t[0]-0.5
     var wxy = t[0]*t[1]
