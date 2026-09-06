@@ -37,6 +37,16 @@ python3 tools/benchmark.py --list clbg
 python3 tools/benchmark.py -O language
 ```
 
+For a complete regression run of every suite (unoptimized vs `-O`, plus a worker sweep on `problems` and `functionals`):
+
+```
+python3 tools/runall.py
+python3 tools/runall.py --morpho ./morpho6
+python3 tools/runall.py --list
+```
+
+`runall.py` is two `benchmark.py` passes: `-O -w sweep` on `problems` and `functionals`, then `-O` on `clbg`, `language`, and `other`. `-n`, `--languages`, `--morpho`, `--list`, and `-w` are forwarded.
+
 ## Command-line flags
 
 * `-O` also times morpho with optimization enabled, requiring the [bytecode optimizer](https://github.com/Morpho-lang/morpho-bytecodeoptimizer). Morpho is run with `--eval "import bytecodeoptimizer" -O`.
