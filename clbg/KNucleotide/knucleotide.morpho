@@ -41,9 +41,7 @@ fn make_three(n) {
     }
   }
   if (b.count() > 0) chunks.append(b)
-  var seq = ""
-  for (c in chunks) seq += c
-  return seq
+  return String.join(chunks)
 }
 
 fn chcode(c) {
@@ -65,27 +63,23 @@ fn cmpdna(a, b) {
 }
 
 fn gen_freq(seq, frame) {
-  var frequences = Dictionary()
+  var frequencies = Dictionary()
   var ns = seq.count() + 1 - frame
   for (var ii = 0; ii < ns; ii += 1) {
     var nucleo = seq.substring(ii, ii + frame)
-    if (frequences.contains(nucleo)) {
-      frequences[nucleo] = frequences[nucleo] + 1
+    if (frequencies.contains(nucleo)) {
+      frequencies[nucleo] += 1
     } else {
-      frequences[nucleo] = 1
+      frequencies[nucleo] = 1
     }
   }
-  return [ns, frequences]
+  return ns, frequencies
 }
 
 fn sort_seq(seq, length) {
-  var pair = gen_freq(seq, length)
-  var n = pair[0]
-  var frequences = pair[1]
+  var (n, frequencies) = gen_freq(seq, length)
   var rows = []
-  for (k in frequences) {
-    rows.append([k, frequences[k]])
-  }
+  for (k, v in frequencies) rows.append((k, v))
   rows.sort(fn (a, b) {
     var fa = a[1]
     var fb = b[1]
@@ -100,22 +94,24 @@ fn sort_seq(seq, length) {
 }
 
 fn find_seq(seq, s) {
-  var pair = gen_freq(seq, s.count())
-  var t = pair[1]
+  var (_, t) = gen_freq(seq, s.count())
   var c = 0
   if (t.contains(s)) c = t[s]
   print "${c}\t${s}"
 }
 
 fn main(n) {
-  var sequence = make_three(n)
-  sort_seq(sequence, 1)
-  sort_seq(sequence, 2)
-  find_seq(sequence, "GGT")
-  find_seq(sequence, "GGTA")
-  find_seq(sequence, "GGTATT")
-  find_seq(sequence, "GGTATTTTAATT")
-  find_seq(sequence, "GGTATTTTAATTTATAGT")
+    var sequence=make_three(n)
+
+    for (length in [1,2]) sort_seq(sequence, length)
+
+    for (s in [
+        "GGT",
+        "GGTA",
+        "GGTATT",
+        "GGTATTTTAATT",
+        "GGTATTTTAATTTATAGT"
+    ]) find_seq(sequence, s)
 }
 
 var N = 1000
